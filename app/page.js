@@ -7,6 +7,9 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const MMR = 0.004;
+const CLOSE_FEE_PER_LEV = 0.0008;
+const calcCloseFee = (myCapital, leverage) =>
+  myCapital * (CLOSE_FEE_PER_LEV * leverage);
 function calcMaintenanceMargin(notional) {
   return notional * MMR;
 }
@@ -168,7 +171,9 @@ function TradingContent() {
       const currentValue = entryQty * price;
       const profit = currentValue - position.amount;
       const finalProfit = position.type === "long" ? profit : -profit;
-      setBalance((prev) => prev + position.myCapital + finalProfit);
+      const closeFee = calcCloseFee(position.myCapital, leverage);
+
+      setBalance((prev) => prev + position.myCapital + finalProfit - closeFee);
       setPosition(null);
       setPnl(0);
       localStorage.removeItem("position");
@@ -456,6 +461,26 @@ function TradingContent() {
               포지션없음
             </div>
           )}
+        </div>
+        <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
+          <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+            <div className="text-[11px] text-slate-500">수수료</div>
+            <div className="font-medium">
+              {position
+                ? calcCloseFee(position.myCapital, leverage).toLocaleString(
+                    undefined,
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }
+                  )
+                : "-"}{" "}
+              USDT
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              = Margin × (0.08% × {leverage}x)
+            </div>
+          </div>
         </div>
       </div>
 
