@@ -40,8 +40,9 @@ function TradingContent() {
   const [val, setVal] = useState(0);
   const [isSell, setIsSell] = useState(false);
   const [value, setValue] = useState(50);
-  const [price, setPrice] = useState(10000);
-  const [prevPrice, setPrevPrice] = useState(10000);
+  const [price, setPrice] = useState(null);
+  const [prevPrice, setPrevPrice] = useState(null);
+  const [isReady, setIsReady] = useState(false);
   const [leverage, setLeverage] = useState(10);
   const [showLeveragePopup, setShowLeveragePopup] = useState(false);
   const [position, setPosition] = useState(null);
@@ -144,6 +145,9 @@ function TradingContent() {
               setPrevPrice(prev);
             return newPrice;
           });
+          if (!isReady && !Number.isNaN(newPrice)) {
+            setIsReady(true);
+          }
 
           // Safe PnL compute using refs (no resubscribe needed)
           const pos = positionRef.current;
@@ -191,7 +195,7 @@ function TradingContent() {
         if (socket && socket.readyState === WebSocket.OPEN) socket.close();
       } catch (_) {}
     };
-  }, []);
+  }, [isReady]);
 
   // 등락률
   useEffect(() => {
@@ -291,8 +295,18 @@ function TradingContent() {
       ? "text-rose-600"
       : "text-slate-900";
 
+  if (!isReady) {
+    return (
+      <div className="bg-white text-slate-900 max-w-[980px] mx-auto p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8 text-center">
+          <div className="text-sm text-slate-500">가격 로딩 중…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white text-slate-900 max-w-[980px] mx-auto p-4">
+    <div className="bg-white text-slate-900 max-w-[980px] mx-auto h-screen p-4">
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 mb-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -331,17 +345,21 @@ function TradingContent() {
           <div className="flex items-center justify-between">
             <div className="text-xs text-slate-500">Last Price (USDT)</div>
             <div className={`text-2xl font-semibold ${priceColor}`}>
-              {price.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              {price !== null
+                ? price.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })
+                : "--"}
             </div>
           </div>
           <div className="mt-1 text-right text-xs text-slate-400">
-            {parseFloat(price).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {price !== null
+              ? parseFloat(price).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : "--"}
           </div>
 
           <div className="mt-4">
@@ -523,7 +541,23 @@ function TradingContent() {
                 >
                   Leverage
                 </button>
-
+                <div className="h-10 rounded-xl border border-slate-200 text-slate-700 text-xs items-center">
+                  <div className="text-[11px] text-slate-500 text-center">
+                    수수료
+                  </div>
+                  <div className="text-xs text-center">
+                    {position
+                      ? calcCloseFee(
+                          position.myCapital,
+                          leverage
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : "-"}{" "}
+                    USDT
+                  </div>
+                </div>
                 <button
                   onClick={handleExitPosition}
                   className="h-10 rounded-xl bg-slate-900 text-white text-sm hover:bg-black"
@@ -538,26 +572,7 @@ function TradingContent() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-1 text-sm">
-          <div className="rounded-xl border border-slate-200 p-1 bg-slate-50/50">
-            <div className="text-[11px] text-slate-500">수수료</div>
-            <div className="font-medium">
-              {position
-                ? calcCloseFee(position.myCapital, leverage).toLocaleString(
-                    undefined,
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )
-                : "-"}{" "}
-              USDT
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
-              = Margin × (0.08% × {leverage}x)
-            </div>
-          </div>
-        </div>
+        <div className="grid grid-cols-1 gap-1 text-sm"></div>
       </div>
 
       {showLeveragePopup && (
@@ -579,6 +594,7 @@ function TradingContent() {
                 </button>
               ))}
             </div>
+
             <button
               onClick={() => setShowLeveragePopup(false)}
               className="w-full mt-3 h-10 rounded-xl bg-slate-900 text-white text-sm hover:bg-black"
