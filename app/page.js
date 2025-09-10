@@ -40,13 +40,14 @@ function calcMarginRatioIsolated(position, price) {
 
 // === Firebase init (client) ===
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN,
-  databaseURL: process.env.NEXT_PUBLIC_FB_DB_URL,
-  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FB_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FB_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FB_APP_ID,
+  apiKey: "AIzaSyBBOf987WibhkSz_qHSqNe9Is-JLhKaYfs",
+  authDomain: "casino-e07ba.firebaseapp.com",
+  databaseURL:
+    "https://casino-e07ba-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "casino-e07ba",
+  storageBucket: "casino-e07ba.firebasestorage.app",
+  messagingSenderId: "1019127821313",
+  appId: "1:1019127821313:web:e99b4e78b379263b783c00",
 };
 
 const _app = getApps().length ? getApp() : initializeApp(firebaseConfig);
