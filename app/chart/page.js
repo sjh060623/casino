@@ -206,8 +206,8 @@ export default function FuturesMockTrading() {
       } catch (_) {}
 
       const gridOptions = {
-        vertLines: { color: "#f6f6f6", style: 0, visible: true },
-        horzLines: { color: "#f6f6f6", style: 0, visible: true },
+        vertLines: { color: "#f0f0f0", style: 0, visible: true },
+        horzLines: { color: "#f0f0f0", style: 0, visible: true },
       };
 
       const chartWidth = chartRef.current ? chartRef.current.clientWidth : 900;
@@ -343,6 +343,75 @@ export default function FuturesMockTrading() {
         lastValueVisible: false,
       });
 
+      // === Time-scale synchronization (main, volume, macd) ===
+      const charts = [chart, volumeChart, macdChart];
+
+      // keep same barSpacing/rightOffset across charts
+      const applyCommonTimeScale = (c) => {
+        try {
+          c.timeScale().applyOptions({ rightOffset: 0, barSpacing: 5 });
+        } catch (_) {}
+      };
+      charts.forEach(applyCommonTimeScale);
+
+      let syncing = false;
+      const subs = [];
+
+      const mirrorVisibleTimeRange = (source, targets) => (range) => {
+        if (!range || syncing) return;
+        syncing = true;
+        try {
+          targets.forEach((t) => {
+            try {
+              t.timeScale().setVisibleRange(range);
+            } catch (_) {}
+          });
+        } finally {
+          syncing = false;
+        }
+      };
+
+      const mirrorVisibleLogicalRange = (source, targets) => (range) => {
+        if (!range || syncing) return;
+        syncing = true;
+        try {
+          targets.forEach((t) => {
+            try {
+              t.timeScale().setVisibleLogicalRange(range);
+            } catch (_) {}
+          });
+        } finally {
+          syncing = false;
+        }
+      };
+
+      // subscribe from each chart to the other two
+      const pairs = [
+        [chart, [volumeChart, macdChart]],
+        [volumeChart, [chart, macdChart]],
+        [macdChart, [chart, volumeChart]],
+      ];
+
+      pairs.forEach(([src, tgts]) => {
+        const h1 = mirrorVisibleTimeRange(src, tgts);
+        const h2 = mirrorVisibleLogicalRange(src, tgts);
+        src.timeScale().subscribeVisibleTimeRangeChange(h1);
+        src.timeScale().subscribeVisibleLogicalRangeChange(h2);
+        subs.push([src, h1, h2]);
+      });
+
+      // keep scroll/zoom synced on first layout and when container resizes
+      const syncInitialRange = () => {
+        try {
+          const r = chart.timeScale().getVisibleRange();
+          if (r) {
+            volumeChart.timeScale().setVisibleRange(r);
+            macdChart.timeScale().setVisibleRange(r);
+          }
+        } catch (_) {}
+      };
+      syncInitialRange();
+
       // Load initial data for selected interval
       const fetchData = async () => {
         const res = await fetch(
@@ -447,6 +516,17 @@ export default function FuturesMockTrading() {
 
       // Keep cleanup to remove charts & listeners when interval changes
       cleanupFn = () => {
+        // unsubscribe time-scale listeners
+        try {
+          subs.forEach(([src, h1, h2]) => {
+            try {
+              src.timeScale().unsubscribeVisibleTimeRangeChange(h1);
+            } catch (_) {}
+            try {
+              src.timeScale().unsubscribeVisibleLogicalRangeChange(h2);
+            } catch (_) {}
+          });
+        } catch (_) {}
         window.removeEventListener("resize", onResize);
         try {
           chart.remove();
