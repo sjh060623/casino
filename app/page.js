@@ -462,8 +462,8 @@ function TradingContent() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
-          <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+        <div className="grid grid-cols-1 gap-1 text-sm">
+          <div className="rounded-xl border border-slate-200 p-1 bg-slate-50/50">
             <div className="text-[11px] text-slate-500">수수료</div>
             <div className="font-medium">
               {position
