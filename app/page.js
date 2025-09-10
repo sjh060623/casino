@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { FaCaretDown, FaMinus, FaPlus } from "react-icons/fa";
 import { FiShare2 } from "react-icons/fi";
 import { useSearchParams } from "next/navigation";
@@ -55,6 +55,10 @@ function TradingContent() {
   const [timeLeft, setTimeLeft] = useState(DURATION);
   const [endTime, setEndTime] = useState(Date.now() + DURATION);
 
+  // Refs for latest position and leverage (for use in WS without resubscribe)
+  const positionRef = useRef(null);
+  const leverageRef = useRef(leverage);
+
   const format = (ms) => {
     if (ms < 0) ms = 0;
     const totalSec = Math.floor(ms / 1000);
@@ -94,34 +98,100 @@ function TradingContent() {
     setLeverage(savedLeverage);
   }, []);
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+  useEffect(() => {
+    leverageRef.current = leverage;
+  }, [leverage]);
+
   useEffect(() => {
     localStorage.setItem("balance", balance.toString());
   }, [balance]);
 
   useEffect(() => {
-    const socket = new WebSocket(
-      "wss://fstream.binance.com/ws/btcusdt@kline_1m"
-    );
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const k = data.k;
-      const newPrice = parseFloat(k.c);
+    let socket;
+    let reconnectTimeout;
+    let retry = 0;
+    const MAX_RETRY_DELAY = 15000; // 15s cap
 
-      setPrice((prev) => {
-        setPrevPrice(prev);
-        return newPrice;
-      });
-
-      if (position) {
-        const entryQty = position.amount / position.entry;
-        const currentValue = entryQty * newPrice;
-        const profit = currentValue - position.amount;
-        const finalProfit = position.type === "long" ? profit : -profit;
-        setPnl(finalProfit);
+    const connectWebSocket = () => {
+      try {
+        socket = new WebSocket(
+          "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
+        );
+      } catch (e) {
+        console.error("WS construct error:", e);
+        scheduleReconnect();
+        return;
       }
+
+      socket.onopen = () => {
+        // reset backoff on success
+        retry = 0;
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const k = data.k;
+          if (!k) return;
+          const newPrice = parseFloat(k.c);
+
+          setPrice((prev) => {
+            if (prev !== null && prev !== undefined && prev !== newPrice)
+              setPrevPrice(prev);
+            return newPrice;
+          });
+
+          // Safe PnL compute using refs (no resubscribe needed)
+          const pos = positionRef.current;
+          const lev = leverageRef.current || 1;
+          if (pos && !Number.isNaN(newPrice)) {
+            const entryQty = pos.amount / pos.entry;
+            const currentValue = entryQty * newPrice;
+            const profit = currentValue - pos.amount;
+            const finalProfit = pos.type === "long" ? profit : -profit;
+            setPnl(finalProfit);
+          }
+        } catch (err) {
+          console.error("WS message parse error:", err);
+        }
+      };
+
+      socket.onerror = (event) => {
+        try {
+          console.error(
+            "WebSocket error:",
+            (event && (event.message || event.reason || event.type)) || event
+          );
+        } catch (_) {}
+        try {
+          socket.close();
+        } catch (_) {}
+      };
+
+      socket.onclose = () => {
+        scheduleReconnect();
+      };
     };
-    return () => socket.close();
-  }, [position]);
+
+    const scheduleReconnect = () => {
+      const delay = Math.min(1000 * Math.pow(2, retry++), MAX_RETRY_DELAY);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      reconnectTimeout = setTimeout(connectWebSocket, delay);
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      try {
+        if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+      } catch (_) {}
+    };
+  }, []);
 
   // 등락률
   useEffect(() => {
@@ -129,11 +199,17 @@ function TradingContent() {
       "wss://stream.binance.com:9443/ws/btcusdt@ticker"
     );
     tickerSocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const changePercent = parseFloat(data.P);
-      setPriceChangePercent(changePercent);
+      try {
+        const data = JSON.parse(event.data);
+        const changePercent = parseFloat(data.P);
+        if (!Number.isNaN(changePercent)) setPriceChangePercent(changePercent);
+      } catch (_) {}
     };
-    return () => tickerSocket.close();
+    return () => {
+      try {
+        tickerSocket.close();
+      } catch (_) {}
+    };
   }, []);
 
   useEffect(() => {
@@ -256,15 +332,15 @@ function TradingContent() {
             <div className="text-xs text-slate-500">Last Price (USDT)</div>
             <div className={`text-2xl font-semibold ${priceColor}`}>
               {price.toLocaleString(undefined, {
-                minimumFractionDigits: 1,
-                maximumFractionDigits: 1,
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
               })}
             </div>
           </div>
           <div className="mt-1 text-right text-xs text-slate-400">
             {parseFloat(price).toLocaleString("en-US", {
-              minimumFractionDigits: 1,
-              maximumFractionDigits: 1,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
             })}
           </div>
 
@@ -415,9 +491,9 @@ function TradingContent() {
                     Market Price (USDT)
                   </div>
                   <div className="font-medium">
-                    {(price + 12).toLocaleString(undefined, {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
+                    {price?.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
                     })}
                   </div>
                 </div>
