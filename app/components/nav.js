@@ -1,6 +1,7 @@
 import { FaChartLine } from "react-icons/fa6";
 import { FaCircleNotch } from "react-icons/fa";
 import Link from "next/link";
+import ResetStorageButton from "./remove";
 
 export default function Nav() {
   return (
@@ -18,6 +19,7 @@ export default function Nav() {
             Trade
           </div>
         </Link>
+        <ResetStorageButton />
       </div>
     </nav>
   );
