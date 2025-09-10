@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 export default function ResetStorageButton({
-  label = "초기화",
+  label = "돈 초기화",
   confirm = true,
   extraKeys = [],
   onCleared,
@@ -44,7 +44,7 @@ export default function ResetStorageButton({
     <button
       onClick={handleClick}
       disabled={loading}
-      className={`h-10 px-4 rounded-xl text-sm font-medium transition
+      className={`px-3 py-1.5 rounded-lg border border-slate-200 text-xs
         ${
           loading
             ? "bg-slate-200 text-slate-400 cursor-not-allowed"

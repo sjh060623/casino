@@ -5,6 +5,11 @@ import { FaCaretDown, FaMinus, FaPlus } from "react-icons/fa";
 import { FiShare2 } from "react-icons/fi";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+// === Firebase (v9 modular) ===
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getDatabase, ref, get, set, serverTimestamp } from "firebase/database";
+import ResetStorageButton from "./components/remove";
 
 const MMR = 0.004;
 const CLOSE_FEE_PER_LEV = 0.0008;
@@ -33,6 +38,73 @@ function calcMarginRatioIsolated(position, price) {
   return (mm + unrealizedLoss) / Math.max(1e-9, positionMargin);
 }
 
+// === Firebase init (client) ===
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FB_DB_URL,
+  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FB_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FB_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FB_APP_ID,
+};
+
+const _app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const _auth = getAuth(_app);
+const _db = getDatabase(_app);
+
+async function upsertTotalsAfterClose({ finalProfit, usedMargin }) {
+  try {
+    const uid = _auth.currentUser?.uid;
+    if (!uid) {
+      console.warn("[upsertTotalsAfterClose] no auth user");
+      return;
+    }
+
+    // 닉네임 로드
+    let nickname = `anon-${uid.slice(0, 6)}`;
+    try {
+      const profSnap = await get(ref(_db, `users/${uid}/profile`));
+      if (profSnap.exists() && profSnap.val()?.nickname) {
+        nickname = profSnap.val().nickname;
+      }
+    } catch (_) {}
+
+    const totalsRef = ref(_db, `leaderboard_totals/${uid}`);
+    let totalProfit = 0;
+    let totalMargin = 0;
+    try {
+      const prev = await get(totalsRef);
+      if (prev.exists()) {
+        const v = prev.val();
+        totalProfit = Number(v.totalProfit || 0);
+        totalMargin = Number(v.totalMargin || 0);
+      }
+    } catch (e) {
+      console.warn("[upsertTotalsAfterClose] get prev error", e);
+    }
+
+    const newTotalProfit = totalProfit + Number(finalProfit || 0);
+    const newTotalMargin = totalMargin + Number(usedMargin || 0);
+    const totalRoi = (newTotalProfit / Math.max(newTotalMargin, 1e-9)) * 100;
+
+    const doc = {
+      uid,
+      nickname,
+      totalProfit: Number(newTotalProfit),
+      totalMargin: Number(newTotalMargin),
+      totalRoi: Number(totalRoi),
+      scoreNegTotal: -Number(totalRoi),
+      updatedAt: serverTimestamp(),
+    };
+
+    await set(totalsRef, doc);
+    console.log("[leaderboard_totals] upserted", doc);
+  } catch (e) {
+    console.error("[upsertTotalsAfterClose] error", e);
+  }
+}
+
 function TradingContent() {
   const searchParams = useSearchParams();
   const initial = searchParams.get("initial");
@@ -56,7 +128,6 @@ function TradingContent() {
   const [timeLeft, setTimeLeft] = useState(DURATION);
   const [endTime, setEndTime] = useState(Date.now() + DURATION);
 
-  // Refs for latest position and leverage (for use in WS without resubscribe)
   const positionRef = useRef(null);
   const leverageRef = useRef(leverage);
 
@@ -99,7 +170,6 @@ function TradingContent() {
     setLeverage(savedLeverage);
   }, []);
 
-  // Keep refs in sync with state
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
@@ -129,7 +199,6 @@ function TradingContent() {
       }
 
       socket.onopen = () => {
-        // reset backoff on success
         retry = 0;
       };
 
@@ -245,7 +314,7 @@ function TradingContent() {
     }
   };
 
-  const handleExitPosition = () => {
+  const handleExitPosition = async () => {
     if (position && price) {
       const entryQty = position.amount / position.entry;
       const currentValue = entryQty * price;
@@ -254,6 +323,17 @@ function TradingContent() {
       const closeFee = calcCloseFee(position.myCapital, leverage);
 
       setBalance((prev) => prev + position.myCapital + finalProfit - closeFee);
+
+      try {
+        await upsertTotalsAfterClose({
+          finalProfit: finalProfit - closeFee,
+          usedMargin: position.myCapital,
+        });
+      } catch (e) {
+        console.warn("[handleExitPosition] totals upsert failed", e);
+      }
+
+      // 포지션 정리
       setPosition(null);
       setPnl(0);
       localStorage.removeItem("position");
@@ -324,6 +404,7 @@ function TradingContent() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ResetStorageButton />
             <button
               onClick={() => setShowLeveragePopup(true)}
               className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs hover:bg-slate-50"

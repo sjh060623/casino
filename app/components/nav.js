@@ -1,12 +1,13 @@
 import { FaChartLine } from "react-icons/fa6";
 import { FaCircleNotch } from "react-icons/fa";
+import { FaRankingStar } from "react-icons/fa6";
+
 import Link from "next/link";
-import ResetStorageButton from "./remove";
 
 export default function Nav() {
   return (
-    <nav className="flex flex-row bottom-0 sticky w-full h-16 border rounded-t-2xl border-slate-200 p-3 bg-slate-50">
-      <div className="flex flex-row space-x-5 items-center">
+    <nav className="flex flex-row bottom-0 sticky w-full h-16 items-center justify-center p-3 bg-white">
+      <div className="flex w-52 justify-between border border-slate-200 shadow-2xl rounded-4xl px-5 py-2">
         <Link href="/chart">
           <div className="flex flex-col items-center font-thin text-xs space-y-2">
             <FaChartLine size={20} />
@@ -19,7 +20,12 @@ export default function Nav() {
             Trade
           </div>
         </Link>
-        <ResetStorageButton />
+        <Link href="/rank">
+          <div className="flex flex-col items-center font-thin text-xs space-y-2">
+            <FaRankingStar size={20} />
+            Rank
+          </div>
+        </Link>
       </div>
     </nav>
   );
