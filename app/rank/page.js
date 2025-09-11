@@ -128,8 +128,16 @@ export default function RankPage() {
       limitToFirst(50)
     );
     const offFn = onValue(qRank, (snap) => {
-      const val = snap.val() || {};
-      const arr = Object.values(val);
+      const arr = [];
+      snap.forEach((child) => {
+        arr.push(child.val());
+      });
+      // (Optional) tie-breaker: if scoreNegTotal is equal, sort by updatedAt desc
+      arr.sort((a, b) => {
+        const s = (a?.scoreNegTotal ?? 0) - (b?.scoreNegTotal ?? 0);
+        if (s !== 0) return s; // lower scoreNegTotal first → higher ROI first
+        return (b?.updatedAt ?? 0) - (a?.updatedAt ?? 0);
+      });
       setRows(arr);
       setLoadingRank(false);
     });
@@ -237,6 +245,32 @@ export default function RankPage() {
         });
 
       console.log(`[profile saved] users/${uid}/profile`);
+
+      // 랭크 문서에도 닉네임을 즉시 반영 (포지션 종료를 기다리지 않도록)
+      try {
+        await update(ref(db, `leaderboard_totals/${uid}`), {
+          nickname: n,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn(
+          "[nickname propagate] totals update failed",
+          e?.code,
+          e?.message
+        );
+      }
+      try {
+        await update(ref(db, `leaderboard/${uid}`), {
+          nickname: n,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (e) {
+        console.warn(
+          "[nickname propagate] legacy leaderboard update failed",
+          e?.code,
+          e?.message
+        );
+      }
 
       setEditOpen(false);
       clearFlag();
