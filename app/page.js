@@ -412,12 +412,6 @@ function TradingContent() {
             >
               {leverage}x
             </button>
-            <button
-              onClick={() => setShowPopup(true)}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs hover:bg-slate-50"
-            >
-              +
-            </button>
           </div>
         </div>
       </div>

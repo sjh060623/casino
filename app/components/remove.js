@@ -40,19 +40,5 @@ export default function ResetStorageButton({
     }
   };
 
-  return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className={`px-3 py-1.5 rounded-lg border border-slate-200 text-xs
-        ${
-          loading
-            ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-            : "bg-slate-900 text-white hover:bg-black"
-        }`}
-      title="정보를 삭제합니다"
-    >
-      {loading ? "초기화 중..." : label}
-    </button>
-  );
+  return <div></div>;
 }
